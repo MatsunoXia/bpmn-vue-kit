@@ -18,4 +18,5 @@ export default defineConfig({
     outDir: resolve(__dirname, 'docs'),
     emptyOutDir: true,
   },
+  base: './'
 })
