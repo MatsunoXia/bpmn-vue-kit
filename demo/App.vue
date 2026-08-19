@@ -188,7 +188,7 @@ function showDataDemo() {
   const core = designerRef.value?.getCore()
   if (!core) return
   businessDataJson.value = JSON.stringify(core.exportBusinessData(), null, 2)
-  fullDataJson.value = JSON.stringify(core.exportAllData(), null, 2)
+  fullDataJson.value = JSON.stringify(core.exportDefinition(), null, 2)
   showModal.value = true
 }
 </script>

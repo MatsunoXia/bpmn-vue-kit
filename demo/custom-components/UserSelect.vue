@@ -1,6 +1,10 @@
 <template>
   <div class="user-select" ref="rootRef">
-    <div class="select-input" @click="toggleDropdown">
+    <div
+      class="select-input"
+      :class="{ disabled: disabled || readonly }"
+      @click="toggleDropdown"
+    >
       <span class="selected-text" v-if="selectedUser">{{ selectedUser.name }}</span>
       <span class="placeholder" v-else>{{ property.placeholder || '请选择用户' }}</span>
       <span class="arrow">▼</span>
@@ -44,6 +48,8 @@ const props = defineProps({
   property: { type: Object, default: () => ({}) },
   elementId: { type: String, default: '' },
   businessData: { type: Object, default: () => ({}) },
+  readonly: { type: Boolean, default: false },
+  disabled: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['update:modelValue'])
@@ -70,11 +76,15 @@ const filteredUsers = computed(() => {
 })
 
 function toggleDropdown() {
+  if (props.readonly || props.disabled) return
+
   showDropdown.value = !showDropdown.value
   if (showDropdown.value) searchText.value = ''
 }
 
 function selectUser(user) {
+  if (props.readonly || props.disabled) return
+
   emit('update:modelValue', user.id)
   showDropdown.value = false
 }
@@ -107,6 +117,8 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onClickOutside))
 }
 
 .select-input:hover { border-color: #c0c4cc; }
+.select-input.disabled { color: #c0c4cc; background: #f5f7fa; cursor: not-allowed; }
+.select-input.disabled:hover { border-color: #dcdfe6; }
 
 .selected-text { color: #303133; font-size: 13px; }
 .placeholder { color: #c0c4cc; font-size: 13px; }

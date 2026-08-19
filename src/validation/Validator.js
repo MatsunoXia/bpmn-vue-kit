@@ -7,7 +7,8 @@
  * 3. 业务规则校验（外部注册）
  */
 
-import { BPMN_TYPES, VALIDATION_LEVEL, VALIDATION_TYPE } from './constants.js'
+import { BPMN_TYPES, VALIDATION_LEVEL, VALIDATION_TYPE } from '../shared/constants.js'
+import { evaluateCondition, getPathValue } from '../engine/ConditionEngine.js'
 
 /**
  * 校验结果结构
@@ -51,14 +52,51 @@ export class Validator {
     const results = []
 
     // 1. 结构校验
-    results.push(...this._validateStructure(bpmnElements))
+    results.push(...this.validateProcess(bpmnElements))
 
     // 2. Schema 属性校验
-    for (const element of bpmnElements) {
+    results.push(...this.validateProperties(bpmnElements))
+
+    // 3. 自定义业务校验
+    results.push(...this.validateBusiness())
+
+    this._events.emit('validation.end', results)
+    return results
+  }
+
+  /**
+   * 校验单个元素
+   */
+  validateElement(element) {
+    return this._validateProperties(element)
+  }
+
+  /**
+   * 校验流程结构。
+   */
+  validateProcess(elements) {
+    return this._validateStructure(elements)
+  }
+
+  /**
+   * 校验所有元素的 Schema 属性。
+   */
+  validateProperties(elements) {
+    const results = []
+
+    for (const element of elements || []) {
       results.push(...this._validateProperties(element))
     }
 
-    // 3. 自定义业务校验
+    return results
+  }
+
+  /**
+   * 执行外部注册的业务校验器。
+   */
+  validateBusiness() {
+    const results = []
+
     for (const fn of this._customValidators) {
       try {
         const customResults = fn(this._data, this._schema)
@@ -70,16 +108,6 @@ export class Validator {
       }
     }
 
-    this._events.emit('validation.end', results)
-    return results
-  }
-
-  /**
-   * 校验单个元素
-   */
-  validateElement(element) {
-    const results = []
-    results.push(...this._validateProperties(element))
     return results
   }
 
@@ -202,13 +230,14 @@ export class Validator {
       // 检查可见性条件
       if (prop.visibleWhen) {
         const checkData = prop.target === 'bpmn' ? bpmnData : businessData
-        if (!this._evaluateCondition(checkData, prop.visibleWhen)) {
+        if (!evaluateCondition(checkData, prop.visibleWhen)) {
           continue // 不可见，跳过校验
         }
       }
 
       // 获取字段值
-      const value = prop.target === 'bpmn' ? bpmnData[prop.key] : businessData[prop.key]
+      const sourceData = prop.target === 'bpmn' ? bpmnData : businessData
+      const value = getPathValue(sourceData, prop.data?.path || prop.key)
 
       // 必填校验
       if (prop.required) {
@@ -250,29 +279,6 @@ export class Validator {
     }
 
     return results
-  }
-
-  /**
-   * 评估条件表达式
-   * 条件格式: { field, op, value }
-   */
-  _evaluateCondition(data, condition) {
-    if (!condition || !condition.field) return true
-    const fieldValue = data[condition.field]
-    const { op, value } = condition
-
-    switch (op) {
-      case '==': return fieldValue == value
-      case '===': return fieldValue === value
-      case '!=': return fieldValue != value
-      case '>': return fieldValue > value
-      case '<': return fieldValue < value
-      case '>=': return fieldValue >= value
-      case '<=': return fieldValue <= value
-      case 'in': return Array.isArray(value) && value.includes(fieldValue)
-      case 'notEmpty': return fieldValue !== undefined && fieldValue !== null && fieldValue !== ''
-      default: return true
-    }
   }
 
   _makeResult({ elementId, elementType, elementName, field, level, type, message, code }) {

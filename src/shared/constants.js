@@ -49,6 +49,7 @@ export const WIDGET_TYPES = {
 // 数据目标
 export const DATA_TARGET = {
   BPMN: 'bpmn',
+  COMPONENT: 'component',
   BUSINESS: 'business',
 }
 

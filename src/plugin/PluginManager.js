@@ -45,7 +45,7 @@ export class PluginManager {
       plugin.install(context, options)
     }
 
-    this._plugins.set(plugin.name, { plugin, options })
+    this._plugins.set(plugin.name, { plugin, options, context })
   }
 
   /**
@@ -54,7 +54,7 @@ export class PluginManager {
   uninstall(pluginName) {
     const entry = this._plugins.get(pluginName)
     if (entry && typeof entry.plugin.uninstall === 'function') {
-      entry.plugin.uninstall()
+      entry.plugin.uninstall(entry.context, entry.options)
     }
     this._plugins.delete(pluginName)
   }
@@ -85,6 +85,10 @@ export class PluginManager {
    * 清空
    */
   clear() {
+    for (const pluginName of this._plugins.keys()) {
+      this.uninstall(pluginName)
+    }
+
     this._plugins.clear()
   }
 }

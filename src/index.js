@@ -1,26 +1,66 @@
 /**
  * BPMN Vue Kit
  * Schema-driven BPMN Designer for Vue 3
+ *
+ * 公共入口按领域聚合，避免消费者依赖内部目录结构。
  */
 
-// Vue 组件
-export { default as BpmnDesigner } from './components/BpmnDesigner.vue'
-export { default as BpmnToolbar } from './components/BpmnToolbar.vue'
-export { default as PropertyPanel } from './components/PropertyPanel.vue'
-export { default as ValidationPanel } from './components/ValidationPanel.vue'
-export { default as ConditionEditor } from './components/ConditionEditor.vue'
-export { default as ContextMenu } from './components/ContextMenu.vue'
+// UI
+export {
+  BpmnDesigner,
+  BpmnToolbar,
+  BpmnPalette,
+  PropertyPanel,
+  ValidationPanel,
+  ConditionEditor,
+  ContextMenu,
+} from './ui/index.js'
 
-// Core 模块
+// Core / runtime
 export {
   DesignerCore,
+  DEFAULT_BPMN_XML,
   EventManager,
   EVENTS,
-  SchemaManager,
+  ModeManager,
+} from './core/index.js'
+
+// BPMN adapter
+export {
+  BpmnModel,
+  BpmnSerializer,
+  BPMN_COMMAND_EVENTS,
+} from './bpmn/index.js'
+
+// Data
+export {
   DataManager,
-  Validator,
+  DataSerializer,
+} from './data/index.js'
+
+// Schema
+export {
+  SchemaManager,
+  SchemaMatcher,
+} from './schema/index.js'
+
+// Components / extensions
+export {
   ComponentRegistry,
-  PluginManager,
+  normalizeComponentRegistration,
+} from './component/index.js'
+
+export { PluginManager } from './plugin/index.js'
+
+// Validation
+export {
+  Validator,
+  PropertyValidator,
+  ProcessValidator,
+} from './validation/index.js'
+
+// Shared constants
+export {
   BPMN_TYPES,
   ELEMENT_CATEGORIES,
   WIDGET_TYPES,
@@ -28,4 +68,14 @@ export {
   VALIDATION_LEVEL,
   VALIDATION_TYPE,
   getCategory,
-} from './core/index.js'
+} from './shared/constants.js'
+
+// Condition engine
+export {
+  evaluateCondition,
+  evaluateConditions,
+  getPathValue,
+  serializeCondition,
+  serializeConditions,
+  setPathValue,
+} from './engine/ConditionEngine.js'

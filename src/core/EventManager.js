@@ -49,13 +49,17 @@ export class EventManager {
    * @param  {...any} args
    */
   emit(event, ...args) {
-    const set = this._listeners.get(event)
-    if (set) {
+    const events = EVENT_EQUIVALENTS[event] || [event]
+
+    for (const eventName of events) {
+      const set = this._listeners.get(eventName)
+      if (!set) continue
+
       set.forEach(cb => {
         try {
           cb(...args)
         } catch (e) {
-          console.error(`[EventManager] Error in listener for "${event}":`, e)
+          console.error(`[EventManager] Error in listener for "${eventName}":`, e)
         }
       })
     }
@@ -83,4 +87,24 @@ export const EVENTS = {
   XML_EXPORTED: 'xml.exported',
   DATA_CHANGED: 'data.changed',
   CANVAS_CLICK: 'canvas.click',
+
+  // 新规范事件名，旧名称继续保留兼容。
+  ELEMENT_CREATE: 'element.create',
+  ELEMENT_UPDATE: 'element.update',
+  ELEMENT_REMOVE: 'element.remove',
+  SELECTION_CHANGE: 'selection.change',
+  BUSINESS_DATA_CHANGE: 'business-data.change',
+}
+
+const EVENT_EQUIVALENTS = {
+  [EVENTS.ELEMENT_CREATED]: [EVENTS.ELEMENT_CREATED, EVENTS.ELEMENT_CREATE],
+  [EVENTS.ELEMENT_CREATE]: [EVENTS.ELEMENT_CREATE, EVENTS.ELEMENT_CREATED],
+  [EVENTS.ELEMENT_CHANGED]: [EVENTS.ELEMENT_CHANGED, EVENTS.ELEMENT_UPDATE],
+  [EVENTS.ELEMENT_UPDATE]: [EVENTS.ELEMENT_UPDATE, EVENTS.ELEMENT_CHANGED],
+  [EVENTS.ELEMENT_REMOVED]: [EVENTS.ELEMENT_REMOVED, EVENTS.ELEMENT_REMOVE],
+  [EVENTS.ELEMENT_REMOVE]: [EVENTS.ELEMENT_REMOVE, EVENTS.ELEMENT_REMOVED],
+  [EVENTS.ELEMENT_SELECTED]: [EVENTS.ELEMENT_SELECTED, EVENTS.SELECTION_CHANGE],
+  [EVENTS.SELECTION_CHANGE]: [EVENTS.SELECTION_CHANGE, EVENTS.ELEMENT_SELECTED],
+  [EVENTS.DATA_CHANGED]: [EVENTS.DATA_CHANGED, EVENTS.BUSINESS_DATA_CHANGE],
+  [EVENTS.BUSINESS_DATA_CHANGE]: [EVENTS.BUSINESS_DATA_CHANGE, EVENTS.DATA_CHANGED],
 }

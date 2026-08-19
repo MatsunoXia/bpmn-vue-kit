@@ -17,6 +17,7 @@ export class ComponentRegistry {
   constructor() {
     // Map<string, VueComponent>
     this._components = new Map()
+    this._metadata = new Map()
     // 内置组件类型（不允许覆盖）
     this._builtinTypes = new Set(['input', 'textarea', 'number', 'select', 'radio', 'checkbox', 'switch'])
   }
@@ -31,7 +32,19 @@ export class ComponentRegistry {
       console.warn(`[ComponentRegistry] "${type}" is a built-in type, cannot be overridden.`)
       return
     }
-    this._components.set(type, component)
+    const descriptor =
+      component && component.component
+        ? component
+        : { component }
+
+    this._components.set(type, descriptor.component)
+    this._metadata.set(type, {
+      type,
+      props: descriptor.props || {},
+      getValue: descriptor.getValue,
+      setValue: descriptor.setValue,
+      validate: descriptor.validate,
+    })
   }
 
   /**
@@ -49,6 +62,7 @@ export class ComponentRegistry {
    */
   unregister(type) {
     this._components.delete(type)
+    this._metadata.delete(type)
   }
 
   /**
@@ -81,9 +95,17 @@ export class ComponentRegistry {
   }
 
   /**
+   * 获取自定义组件注册描述。
+   */
+  getMetadata(type) {
+    return this._metadata.get(type) || null
+  }
+
+  /**
    * 清空
    */
   clear() {
     this._components.clear()
+    this._metadata.clear()
   }
 }

@@ -1,21 +1,7 @@
 /**
- * BPMN Vue Kit - Core Module
- * 框架无关的核心层
+ * Core：设计器运行时编排层。
+ * 这里仅暴露生命周期、事件和模式管理，不再混入数据、Schema、组件注册等领域实现。
  */
-
 export { DesignerCore, DEFAULT_BPMN_XML } from './DesignerCore.js'
 export { EventManager, EVENTS } from './EventManager.js'
-export { SchemaManager } from './SchemaManager.js'
-export { DataManager } from './DataManager.js'
-export { Validator } from './Validator.js'
-export { ComponentRegistry } from './ComponentRegistry.js'
-export { PluginManager } from './PluginManager.js'
-export {
-  BPMN_TYPES,
-  ELEMENT_CATEGORIES,
-  WIDGET_TYPES,
-  DATA_TARGET,
-  VALIDATION_LEVEL,
-  VALIDATION_TYPE,
-  getCategory,
-} from './constants.js'
+export { ModeManager } from './ModeManager.js'

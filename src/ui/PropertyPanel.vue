@@ -38,10 +38,13 @@
             <component
               v-if="isCustomType(prop.type)"
               :is="getCustomComponent(prop.type)"
+              v-bind="{ ...prop.component?.props, ...getCustomProps(prop.type) }"
               :model-value="getValue(prop)"
               :property="prop"
               :element-id="elementId"
-              :business-data="businessData"
+              :business-data="elementData.business"
+              :readonly="readonly || prop.readonly"
+              :disabled="readonly || prop.disabled || prop.readonly"
               @update:model-value="onInput(prop, $event)"
             />
 
@@ -172,15 +175,23 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { BPMN_TYPES } from '../core/constants.js'
+import { BPMN_TYPES } from '../shared/constants.js'
+import {
+  evaluateCondition,
+  getPathValue,
+  serializeConditions,
+  setPathValue,
+} from '../engine/ConditionEngine.js'
 import ConditionEditor from './ConditionEditor.vue'
 
 const props = defineProps({
   elementId: { type: String, default: null },
   elementType: { type: String, default: null },
   schema: { type: Object, default: null },
-  bpmnData: { type: Object, default: () => ({}) },
-  businessData: { type: Object, default: () => ({}) },
+  elementData: {
+    type: Object,
+    default: () => ({ bpmn: {}, component: {}, business: {} }),
+  },
   validationErrors: { type: Array, default: () => [] },
   /** 自定义组件注册中心实例 */
   componentRegistry: { type: Object, default: null },
@@ -192,7 +203,7 @@ const props = defineProps({
   isGatewayFlow: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['update:bpmnData', 'update:businessData'])
+const emit = defineEmits(['update:data'])
 
 const collapsedGroups = ref(new Set())
 
@@ -240,34 +251,34 @@ function toggleGroup(key) {
 }
 
 function getValue(prop) {
-  if (prop.target === 'bpmn') {
-    return props.bpmnData[prop.key] ?? prop.defaultValue ?? ''
-  }
-  return props.businessData[prop.key] ?? prop.defaultValue ?? ''
+  const target = prop.data?.target || prop.target || 'business'
+  const data = props.elementData?.[target] || {}
+  const value = getPathValue(data, prop.data?.path || prop.key)
+  return value ?? prop.defaultValue ?? ''
 }
 
 function onInput(prop, value) {
-  if (prop.target === 'bpmn') {
-    emit('update:bpmnData', { ...props.bpmnData, [prop.key]: value })
-  } else {
-    emit('update:businessData', { ...props.businessData, [prop.key]: value })
-  }
+  if (props.readonly || prop.readonly || prop.disabled) return
+
+  const path = prop.data?.path || prop.key
+
+  const target = prop.data?.target || prop.target || 'business'
+  const current = props.elementData?.[target] || {}
+  const nextData = setPathValue(current, path, value)
+
+  emit('update:data', {
+    target,
+    data: nextData,
+    path,
+    value,
+  })
 }
 
 function isVisible(prop) {
   if (!prop.visibleWhen) return true
-  const checkData = prop.target === 'bpmn' ? props.bpmnData : props.businessData
-  const fieldValue = checkData[prop.visibleWhen.field]
-  const { op, value } = prop.visibleWhen
-
-  switch (op) {
-    case '==': return fieldValue == value
-    case '===': return fieldValue === value
-    case '!=': return fieldValue != value
-    case 'in': return Array.isArray(value) && value.includes(fieldValue)
-    case 'notEmpty': return fieldValue !== undefined && fieldValue !== null && fieldValue !== ''
-    default: return true
-  }
+  const target = prop.data?.target || prop.target || 'business'
+  const checkData = props.elementData?.[target] || {}
+  return evaluateCondition(checkData, prop.visibleWhen)
 }
 
 // 自定义组件相关
@@ -277,6 +288,10 @@ function isCustomType(type) {
 
 function getCustomComponent(type) {
   return props.componentRegistry ? props.componentRegistry.get(type) : null
+}
+
+function getCustomProps(type) {
+  return props.componentRegistry?.getMetadata(type)?.props || {}
 }
 
 // 校验错误
@@ -306,7 +321,8 @@ const conditionFields = computed(() => {
 })
 
 function getConditionRules(prop) {
-  const data = prop.target === 'bpmn' ? props.bpmnData : props.businessData
+  const target = prop.data?.target || prop.target || 'business'
+  const data = props.elementData?.[target] || {}
   // 优先读 rules 数组，否则从 expression 字符串解析
   if (data.conditions && Array.isArray(data.conditions)) {
     return data.conditions
@@ -316,26 +332,23 @@ function getConditionRules(prop) {
 
 function onConditionChange(prop, rules) {
   // 存储 rules 数组 + 生成的表达式字符串
-  const expression = rules
-    .filter(r => r.field && r.op)
-    .map(r => {
-      if (r.op === 'notEmpty') return `${r.field} 不为空`
-      return `${r.field} ${r.op} ${r.value}`
-    })
-    .join(' AND ')
+  const expression = serializeConditions(rules)
 
   const data = {
-    ...props.businessData,
+    ...(props.elementData?.business || {}),
     conditions: rules,
     conditionExpression: expression,
   }
-  emit('update:businessData', data)
+  emit('update:data', {
+    target: 'business',
+    data,
+  })
 }
 </script>
 
 <style scoped>
 .property-panel {
-  width: 320px;
+  width: 360px;
   height: 100%;
   background: #fff;
   border-left: 1px solid #e4e7ed;

@@ -1,5 +1,9 @@
 <template>
-  <div class="bpmn-designer" @contextmenu.prevent>
+  <div
+    class="bpmn-designer"
+    :class="{ 'bpmn-readonly': isReadonly }"
+    @contextmenu.prevent
+  >
     <BpmnToolbar
       :process-name="processName"
       :can-undo="canUndo"
@@ -24,15 +28,13 @@
           :element-id="selectedId"
           :element-type="selectedType"
           :schema="selectedSchema"
-          :bpmn-data="selectedBpmnData"
-          :business-data="selectedBusinessData"
+          :element-data="selectedElementData"
           :validation-errors="validationErrors"
           :component-registry="componentRegistry"
           :form-fields="currentFormFields"
           :readonly="isReadonly"
           :is-gateway-flow="isGatewayFlow"
-          @update:bpmn-data="onBpmnDataChange"
-          @update:business-data="onBusinessDataChange"
+          @update:data="onElementDataChange"
         />
       </div>
     </div>
@@ -65,8 +67,9 @@ import {
 import {
   DesignerCore,
   EVENTS,
-  BPMN_TYPES,
 } from '../core/index.js'
+import { BPMN_TYPES } from '../shared/constants.js'
+import { serializeConditions } from '../engine/ConditionEngine.js'
 
 import BpmnToolbar from './BpmnToolbar.vue'
 import PropertyPanel from './PropertyPanel.vue'
@@ -129,11 +132,8 @@ const selectedType =
 const selectedSchema =
   ref(null)
 
-const selectedBpmnData =
-  ref({})
-
-const selectedBusinessData =
-  ref({})
+const selectedElementData =
+  ref({ bpmn: {}, component: {}, business: {} })
 
 const processName =
   ref('')
@@ -191,7 +191,7 @@ const isGatewayFlow =
     if (
       !core.value ||
       selectedType.value !==
-        BPMN_TYPES.SEQUENCE_FLOW
+      BPMN_TYPES.SEQUENCE_FLOW
     ) {
       return false
     }
@@ -247,7 +247,6 @@ const isGatewayFlow =
   })
 
 // ==================== 初始化 ====================
-
 onMounted(async () => {
 
   const designerCore =
@@ -294,14 +293,11 @@ onMounted(async () => {
 
   await designerCore.init()
 
-  core.value =
-    designerCore
+  core.value = designerCore
 
-  componentRegistry.value =
-    designerCore.componentRegistry
+  componentRegistry.value = designerCore.componentRegistry
 
   // ==================== 元素选择 ====================
-
   designerCore.events.on(
     EVENTS.ELEMENT_SELECTED,
     (info) => {
@@ -317,7 +313,7 @@ onMounted(async () => {
           BPMN_TYPES.PROCESS
 
         selectedSchema.value =
-          designerCore.schema.getSchema(
+          designerCore.schemaMatcher.getSchema(
             BPMN_TYPES.PROCESS
           )
 
@@ -325,27 +321,15 @@ onMounted(async () => {
           designerCore
             .getProcessElement()
 
-        const businessData =
-          designerCore.data
-            .getProcessData()
-
-        selectedBpmnData.value = {
-          id:
-            process?.id || '',
-
-          name:
-            process
-              ?.businessObject?.name ||
-            '',
+        const elementData = designerCore.getElementData('process')
+        selectedElementData.value = elementData || {
+          bpmn: {},
+          component: {},
+          business: {},
         }
 
-        selectedBusinessData.value =
-          {
-            ...businessData,
-          }
-
         processFormId.value =
-          businessData.formId ||
+          elementData?.business?.formId ||
           null
 
       } else {
@@ -357,7 +341,7 @@ onMounted(async () => {
           info.type
 
         selectedSchema.value =
-          designerCore.schema.getSchema(
+          designerCore.schemaMatcher.getSchema(
             info.type
           )
 
@@ -393,6 +377,18 @@ onMounted(async () => {
     EVENTS.ELEMENT_REMOVED,
     () => {
       updateUndoRedo()
+    }
+  )
+
+  designerCore.events.on(
+    EVENTS.DATA_CHANGED,
+    () => {
+      refreshSelectedData()
+
+      if (selectedId.value === 'process') {
+        const elementData = designerCore.getElementData('process')
+        processFormId.value = elementData?.business?.formId || null
+      }
     }
   )
 
@@ -460,109 +456,64 @@ onBeforeUnmount(() => {
 })
 
 // ==================== 属性数据 ====================
-
 function refreshSelectedData() {
 
   if (!core.value || !selectedId.value) {
     return
   }
 
-  // ===== 流程 =====
+  const data = core.value.getElementData(selectedId.value)
+
+  if (!data) return
+
+  selectedElementData.value = data
+
   if (selectedId.value === 'process') {
-    const process = core.value.getProcessElement()
-    const businessData = core.value.data.getProcessData()
-
-    selectedBpmnData.value = {
-      id: process?.id || '',
-      name: process?.businessObject?.name ||'',
-    }
-
-    selectedBusinessData.value = {
-      ...businessData,
-    }
-
-    processName.value = process?.businessObject?.name || ''
-    processFormId.value = businessData.formId || null
-
-    return
-  }
-
-  // ===== 普通 BPMN 元素 =====
-  const el = core.value.getModeler().get('elementRegistry').get(selectedId.value)
-
-  if (!el) return
-
-  /*
-   * BPMN 数据：
-   * 直接从 bpmn.js 获取。
-   */
-  selectedBpmnData.value = {
-    id: el.id,
-    name: el.businessObject?.name || '',
-  }
-
-  /*
-   * Business 数据：
-   * 从 DataManager 获取。
-   */
-  selectedBusinessData.value = {
-    ...(core.value.data.getBusinessData(selectedId.value) || {}),
+    processName.value = data.bpmn?.name || ''
+    processFormId.value = data.business?.formId || null
   }
 }
 
-// ==================== BPMN 属性修改 ====================
-
-function onBpmnDataChange(newData) {
-  if (!core.value || !selectedId.value) {
+// ==================== 统一属性数据修改 ====================
+function onElementDataChange(payload) {
+  if (
+    !core.value ||
+    !selectedId.value ||
+    isReadonly.value ||
+    !payload?.target
+  ) {
     return
   }
 
-  /*
-   * BPMN 数据只写入 bpmn.js。
-   *
-   * 不再：
-   *
-   * data.updateBpmnData()
-   */
-  core.value.updateElementProperties(
+  const target = payload.target
+  const data = payload.data || {}
+
+  const options =
+    target === 'business' &&
+      selectedType.value === BPMN_TYPES.SEQUENCE_FLOW &&
+      Array.isArray(data.conditions)
+      ? {
+        conditionExpression: serializeConditions(data.conditions),
+      }
+      : undefined
+
+  core.value.updateElementData(
     selectedId.value,
-    newData
+    target,
+    data,
+    options
   )
 
-  if (selectedId.value === 'process' && newData.name !== undefined) {
-    processName.value = newData.name
+  if (selectedId.value === 'process' && target === 'bpmn' && data.name !== undefined) {
+    processName.value = data.name
   }
 
-  selectedBpmnData.value = {
-    ...selectedBpmnData.value,
-    ...newData,
-  }
-}
-
-// ==================== Business 数据修改 ====================
-
-function onBusinessDataChange(newData) {
-  if (!core.value || !selectedId.value) {
-    return
-  }
-
-  if (selectedId.value === 'process') {
-    core.value.data.setProcessData(newData)
-    processFormId.value = newData.formId || null
-  } else {
-    core.value.data.setBusinessData(
-      selectedId.value,
-      newData
-    )
-  }
-
-  selectedBusinessData.value = {
-    ...newData,
+  if (selectedId.value === 'process' && target === 'business') {
+    processFormId.value = data.formId || null
   }
 }
 
 // ==================== 工具栏 ====================
-
 function onUndo() {
   core.value?.undo()
 }
@@ -585,7 +536,7 @@ function onZoomFit() {
 
 function updateUndoRedo() {
   if (!core.value) return
-  canUndo.value =  core.value.canUndo()
+  canUndo.value = core.value.canUndo()
   canRedo.value = core.value.canRedo()
 }
 
@@ -615,9 +566,7 @@ async function onImportXml() {
         processFormId.value = core.value.data.getProcessData().formId || null
 
         selectedId.value = null
-
         selectedType.value = null
-
         selectedSchema.value = null
 
       } catch (err) {
@@ -629,21 +578,14 @@ async function onImportXml() {
 }
 
 // ==================== XML 导出 ====================
-
 async function onExportXml() {
 
   if (!core.value) return
-
   try {
 
-    const xml =
-      await core.value.exportXml()
+    const xml = await core.value.exportXml()
 
-    const a =
-      document.createElement(
-        'a'
-      )
-
+    const a = document.createElement('a')
     a.href =
       URL.createObjectURL(
         new Blob(
@@ -655,60 +597,36 @@ async function onExportXml() {
         )
       )
 
-    a.download =
-      'process.bpmn'
-
+    a.download = 'process.bpmn'
     a.click()
 
-    URL.revokeObjectURL(
-      a.href
-    )
-
-    emit(
-      'export-xml',
-      xml
-    )
+    URL.revokeObjectURL(a.href)
+    emit('export-xml', xml)
 
   } catch (err) {
-
-    alert(
-      '导出失败：' +
-      err.message
-    )
+    alert('导出失败：' + err.message)
   }
 }
 
 // ==================== 校验 ====================
-
 function onValidate() {
 
   if (!core.value) return
 
-  validationErrors.value =
-    core.value.validate()
+  validationErrors.value = core.value.validate()
+  showValidation.value = true
 
-  showValidation.value =
-    true
-
-  emit(
-    'validation',
-    validationErrors.value
-  )
+  emit('validation', validationErrors.value)
 }
 
 // ==================== 数据导出 ====================
-
 function onExportData() {
 
   if (!core.value) return
 
-  const data =
-    core.value.exportAllData()
+  const data = core.value.exportAllData()
 
-  const a =
-    document.createElement(
-      'a'
-    )
+  const a = document.createElement('a')
 
   a.href =
     URL.createObjectURL(
@@ -727,26 +645,17 @@ function onExportData() {
       )
     )
 
-  a.download =
-    'process-data.json'
+  a.download = 'process-data.json'
 
   a.click()
 
-  URL.revokeObjectURL(
-    a.href
-  )
+  URL.revokeObjectURL(a.href)
 
-  emit(
-    'export-data',
-    data
-  )
+  emit('export-data', data)
 }
 
 // ==================== 校验定位 ====================
-
-function onLocateElement(
-  result
-) {
+function onLocateElement(result) {
 
   if (
     !core.value ||
@@ -804,9 +713,8 @@ function onContextMenuAction({
 
     case 'delete':
       if (element) {
-        core.value.getModeler().get('modeling').removeElements([
-            element,
-          ])
+        core.value.getModeler().get('selection').select(element)
+        core.value.deleteSelected()
       } else {
         core.value.deleteSelected()
       }
@@ -837,8 +745,7 @@ function onKeyDown(e) {
       'INPUT',
       'TEXTAREA',
       'SELECT',
-    ].includes(
-      e.target.tagName
+    ].includes(e.target.tagName
     )
   ) {
     return
@@ -848,40 +755,18 @@ function onKeyDown(e) {
     core.value.deleteSelected()
   }
 
-  if (
-    (e.ctrlKey || e.metaKey) &&
-    e.key === 'z' &&
-    !e.shiftKey
-  ) {
-
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
     e.preventDefault()
-
     core.value.undo()
   }
 
-  if (
-    (e.ctrlKey || e.metaKey) &&
-    (
-      e.key === 'y' ||
-      (
-        e.key === 'z' &&
-        e.shiftKey
-      )
-    )
-  ) {
-
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey)) ) {
     e.preventDefault()
-
     core.value.redo()
   }
 
-  if (
-    (e.ctrlKey || e.metaKey) &&
-    e.key === 's'
-  ) {
-
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault()
-
     onExportXml()
   }
 }
@@ -901,17 +786,35 @@ defineExpose({
   importXml: (xml) =>
     core.value?.importXml(xml),
 
+  importAllData: (data, options) =>
+    core.value?.importAllData(data, options),
+
   exportXml: () =>
     core.value?.exportXml(),
 
   exportAllData: () =>
     core.value?.exportAllData(),
 
+  exportDefinition: () =>
+    core.value?.exportDefinition(),
+
+  importDefinition: (definition, options) =>
+    core.value?.importDefinition(definition, options),
+
   exportBusinessData: () =>
     core.value?.exportBusinessData(),
 
+  exportWorkflowData: () =>
+    core.value?.exportWorkflowData(),
+
   validate: () =>
     core.value?.validate(),
+
+  validateProcess: () =>
+    core.value?.validateProcess(),
+
+  validateProperties: () =>
+    core.value?.validateProperties(),
 })
 </script>
 
@@ -925,7 +828,4 @@ defineExpose({
 .designer-body { flex: 1; display: flex; overflow: hidden; }
 .canvas-wrap { flex: 1; position: relative; background: #fafafa; }
 .property-panel-wrap { flex-shrink: 0; overflow-y: auto; height: 100%; }
-
-.bpmn-readonly .djs-palette,
-.bpmn-readonly .djs-context-pad { display: none !important; }
 </style>

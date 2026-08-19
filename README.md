@@ -2,47 +2,97 @@
 
 **Schema-driven BPMN Designer for Vue 3**
 
-## 版本
+一个面向业务流程设计场景的 Vue 3 BPMN 组件库。底层使用 `bpmn-js`，通过 Schema 驱动右侧属性面板，并将 BPMN 原生模型、组件扩展数据、业务数据分层管理。
 
-- **V0.1** — 基础绘制 + Schema 属性面板 + 校验
-- **V0.2** — 条件表达式编辑器 + 右键菜单 + 快捷键 + 只读模式
-- **V0.3** — 扁平化数据导出 + 自定义组件注册 + 插件机制 + 汉化 + 流程回显
 
 ## 项目结构
 
-```
+```text
 bpmn-vue-kit/
-├── src/                          ← 组件库源码
-│   ├── index.js                  ← 库入口
-│   ├── locale.js                 ← bpmn.js 中文汉化
-│   ├── core/                     ← 纯 JS 核心层
-│   │   ├── DesignerCore.js       ← bpmn.js 封装
-│   │   ├── SchemaManager.js      ← Schema 驱动
-│   │   ├── DataManager.js        ← 数据模型（扁平导出）
-│   │   ├── Validator.js          ← 校验引擎
-│   │   ├── ComponentRegistry.js  ← 自定义组件注册
-│   │   └── PluginManager.js      ← 插件机制
-│   └── components/               ← Vue 组件
-│       ├── BpmnDesigner.vue      ← 主组件
-│       ├── BpmnToolbar.vue       ← 工具栏
-│       ├── PropertyPanel.vue     ← 属性面板
-│       ├── ValidationPanel.vue   ← 校验面板
-│       ├── ConditionEditor.vue   ← 条件表达式编辑器
-│       └── ContextMenu.vue       ← 右键菜单
-└── demo/                         ← 示例代码
-    ├── App.vue                   ← 三种模式演示
-    ├── schemas.js                ← Schema 配置
-    ├── mock-forms.js             ← 模拟表单数据
-    ├── validators.js             ← 自定义校验器
-    ├── plugins/                  ← 示例插件
-    └── custom-components/        ← 示例自定义组件
+├── src/
+│   ├── index.js                    # 对外统一入口
+│   │
+│   ├── core/                       # 设计器运行时编排层
+│   │   ├── DesignerCore.js         # 核心协调器
+│   │   ├── EventManager.js         # 统一事件总线
+│   │   ├── ModeManager.js          # design / readonly 模式
+│   │   └── index.js
+│   │
+│   ├── bpmn/                       # bpmn.js 适配层
+│   │   ├── BpmnModel.js            # BPMN 模型查询
+│   │   ├── BpmnSerializer.js       # BPMN XML 序列化
+│   │   ├── BpmnEventAdapter.js     # BPMN 事件适配
+│   │   ├── locale.js               # bpmn.js 汉化
+│   │   └── index.js
+│   │
+│   ├── data/                       # 扩展数据层
+│   │   ├── DataManager.js          # component / business 数据管理
+│   │   ├── DataSerializer.js       # 数据序列化适配
+│   │   └── index.js
+│   │
+│   ├── schema/                     # Schema 层
+│   │   ├── SchemaManager.js        # Schema 管理
+│   │   ├── SchemaMatcher.js        # BPMN 类型与 Schema 匹配
+│   │   └── index.js
+│   │
+│   ├── component/                  # 属性组件注册层
+│   │   ├── ComponentRegistry.js
+│   │   ├── ComponentRenderer.js
+│   │   └── index.js
+│   │
+│   ├── plugin/                     # 插件层
+│   │   ├── PluginManager.js
+│   │   └── index.js
+│   │
+│   ├── validation/                 # 校验层
+│   │   ├── Validator.js             # 综合校验
+│   │   ├── PropertyValidator.js     # 属性校验
+│   │   ├── ProcessValidator.js      # 流程校验
+│   │   └── index.js
+│   │
+│   ├── engine/                     # 通用领域引擎
+│   │   └── ConditionEngine.js      # 条件表达式计算
+│   │
+│   ├── shared/                     # 跨领域公共定义
+│   │   └── constants.js
+│   │
+│   └── ui/                         # Vue UI 组件
+│       ├── BpmnDesigner.vue
+│       ├── BpmnToolbar.vue
+│       ├── BpmnPalette.vue
+│       ├── PropertyPanel.vue
+│       ├── ValidationPanel.vue
+│       ├── ConditionEditor.vue
+│       ├── ContextMenu.vue
+│       └── index.js
+│
+├── demo/                           # 本地演示应用
+│   ├── App.vue
+│   ├── schemas.js
+│   ├── mock-forms.js
+│   ├── validators.js
+│   ├── plugins/
+│   └── custom-components/
+│
+├── public/                          # Demo 静态资源
+├── package.json
+├── vite.config.js
+└── README.md
 ```
 
-## 开发
+## 安装与运行
 
 ```bash
 npm install
 npm run dev
+```
+
+默认 Demo 地址：`http://localhost:5173`
+
+生产构建：
+
+```bash
+npm run build
 ```
 
 ## 三种使用模式
@@ -72,25 +122,27 @@ npm run dev
 |------|------|--------|------|
 | `customSchemas` | Object | `{}` | 自定义 Schema 配置 |
 | `plugins` | Array | `[]` | 插件列表 |
-| `forms` | Array | `[]` | 表单定义（供条件编辑器使用） |
+| `forms` | Array | `[]` | 表单定义，供条件编辑器使用 |
 | `readonly` | Boolean | `false` | 只读模式 |
-| `bpmnXml` | String | `null` | 初始 BPMN XML（回显用） |
-| `businessData` | Object | `null` | 初始业务数据（回显用） |
+| `bpmnXml` | String | `null` | 初始 BPMN XML |
+| `businessData` | Object | `null` | 初始业务数据 |
 
 ## 数据导出格式
 
 ```js
 core.exportBusinessData()
 // {
-//   process: { name: "请假审批", formId: "leave_form" },
-//   nodes: {
-//     "UserTask_1": { type: "userTask", name: "部门审批", assignee: "张三" },
-//     "Flow_3": { type: "sequenceFlow", conditions: [{ field: "amount", op: ">", value: "5000" }] }
+//   process: { formId: 'expense_form' },
+//   elements: {
+//     UserTask_1: { assignee: '张三' },
+//     "Flow_3": { conditions: [{ field: "amount", op: ">", value: "5000", logic: "AND" }] }
 //   }
 // }
 ```
 
 ## Schema 配置
+
+Schema 决定右侧属性面板显示什么属性，以及属性属于哪一层数据。
 
 ```js
 // demo/schemas.js
@@ -119,7 +171,7 @@ export default {
 const MyPlugin = {
   name: 'my-plugin',
   install(context) {
-    context.componentRegistry.register('user-select', MyUserSelect)
+    context.componentRegistry.register('user-select', UserSelect)
     context.schemaManager.addProperties('bpmn:UserTask', [...])
     context.validator.addValidator(fn)
   },

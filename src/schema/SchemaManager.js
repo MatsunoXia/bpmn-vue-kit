@@ -19,7 +19,8 @@
  * }
  */
 
-import { BPMN_TYPES, WIDGET_TYPES, DATA_TARGET, ELEMENT_CATEGORIES, getCategory } from './constants.js'
+import { BPMN_TYPES, WIDGET_TYPES, DATA_TARGET, ELEMENT_CATEGORIES, getCategory } from '../shared/constants.js'
+import { setPathValue } from '../engine/ConditionEngine.js'
 
 /**
  * 默认 Schema 定义
@@ -242,21 +243,49 @@ export class SchemaManager {
    * 标准化单个属性
    */
   _normalizeProperty(prop) {
+    const component = prop.component || {}
+    const data = prop.data || {}
+    const validation = prop.validation || {}
+    const visibility = prop.visibility || {}
+
     return {
       key: prop.key,
       label: prop.label || prop.key,
-      type: prop.type || WIDGET_TYPES.INPUT,
-      target: prop.target || DATA_TARGET.BUSINESS,
+      type: component.type || prop.type || WIDGET_TYPES.INPUT,
+      component: {
+        type: component.type || prop.type || WIDGET_TYPES.INPUT,
+        props: component.props || {},
+      },
+      target: data.target || prop.target || DATA_TARGET.BUSINESS,
+      data: {
+        target: data.target || prop.target || DATA_TARGET.BUSINESS,
+        path: data.path || prop.path || prop.key,
+      },
       group: prop.group || 'basic',
-      required: prop.required ?? false,
+      required: validation.required ?? prop.required ?? false,
       readonly: prop.readonly ?? false,
       disabled: prop.disabled ?? false,
       placeholder: prop.placeholder || '',
       defaultValue: prop.defaultValue ?? undefined,
       options: prop.options || [],
-      visibleWhen: prop.visibleWhen || null,
-      rules: prop.rules || [],
+      visibleWhen: visibility.when || prop.visibleWhen || null,
+      rules: validation.rules || prop.rules || [],
     }
+  }
+
+  /**
+   * 获取属性的数据目标。
+   * 第二阶段统一从 data.target 读取，兼容旧的 target 写法。
+   */
+  getPropertyTarget(prop) {
+    return prop?.data?.target || prop?.target || DATA_TARGET.BUSINESS
+  }
+
+  /**
+   * 获取属性的数据路径。
+   */
+  getPropertyPath(prop) {
+    return prop?.data?.path || prop?.path || prop?.key
   }
 
   /**
@@ -269,8 +298,15 @@ export class SchemaManager {
     const properties = this.getProperties(bpmnType)
     const result = { ...data }
     for (const prop of properties) {
-      if (prop.defaultValue !== undefined && result[prop.key] === undefined) {
-        result[prop.key] = prop.defaultValue
+      const path = prop.data?.path || prop.key
+      if (
+        prop.defaultValue !== undefined &&
+        this._getPathValue(result, path) === undefined
+      ) {
+        Object.assign(
+          result,
+          setPathValue(result, path, prop.defaultValue)
+        )
       }
     }
     return result
@@ -284,5 +320,11 @@ export class SchemaManager {
    */
   getDefaultData(bpmnType) {
     return this.applyDefaults(bpmnType, {})
+  }
+
+  _getPathValue(data, path) {
+    return String(path || '')
+      .split('.')
+      .reduce((current, key) => current == null ? undefined : current[key], data)
   }
 }
